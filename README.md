@@ -21,29 +21,39 @@ flowchart LR
     Q[Question] --> F[Query understanding<br/>company + fiscal-year filters<br/>section hints]
     F --> B & V
     B & V --> R[Reciprocal rank fusion]
-    R --> X[Cross-encoder rerank<br/>top 40 to top 6]
-    X --> G[Gemini: answer only from<br/>numbered excerpts, cite every claim]
+    R --> G[Gemini: answer only from<br/>numbered excerpts, cite every claim]
+    R -. optional, off by default .-> X[Cross-encoder rerank]
     G --> V2[Citation validator]
     V2 --> A[Answer + sources]
 ```
 
 ## Results
 
-> Retrieval numbers come from the **RAG evaluation** workflow, which runs on every push to `main` and needs no API key.
-> Generation numbers need a free Gemini key added as the `GEMINI_API_KEY` repository secret. To be filled in from those runs.
+Measured on **16 real 10-K filings** (8 companies × 2 years, 3,827 chunks) by the **RAG evaluation** workflow.
 
-| Retrieval mode | Recall@6 | Hit@1 | MRR |
-|---|---:|---:|---:|
-| BM25 only | _pending_ | | |
-| Dense only (BGE-small) | _pending_ | | |
-| Hybrid (RRF) | _pending_ | | |
-| Hybrid + cross-encoder rerank | _pending_ | | |
+| Retrieval mode | Recall@6 | Hit@1 | MRR | ms / query |
+|---|---:|---:|---:|---:|
+| BM25 only | 0.890 | 0.780 | 0.837 | 3.7 |
+| Dense only (BGE-small) | 0.939 | 0.854 | 0.898 | 21.8 |
+| **Hybrid (BM25 + dense, RRF)** | **0.976** | **0.902** | **0.936** | 34.1 |
+| Hybrid + cross-encoder rerank | 0.976 | 0.805 | 0.891 | 2,980 |
 
-| Generation metric | Value |
+**What the ablation says**
+
+- **Hybrid beats either retriever alone.** It finds the right company and section for 97.6% of questions,
+  versus 89% for keyword search. BM25 and embeddings miss *different* questions, and rank fusion keeps the
+  hits of both.
+- **The reranker made things worse, so it's off by default.** The off-the-shelf MS MARCO cross-encoder was
+  trained on web search queries. On 10-K text it pushed the right section *down* (hit@1 0.90 → 0.81) and
+  was about 90x slower. The evaluation picks the serving mode from these numbers (highest MRR, then
+  lowest latency); `RERANK=true` turns it back on. A reranker fine-tuned on financial filings might
+  change this result, and the harness would show it.
+
+| Generation metric (Gemini, LLM-judged) | Value |
 |---|---:|
-| Faithfulness (claims supported by the excerpts) | _pending_ |
-| Correct refusal rate (unanswerable questions) | _pending_ |
-| Citation validity | _pending_ |
+| Faithfulness (claims supported by the excerpts) | _pending rerun_ |
+| Correct refusal rate (6 unanswerable questions) | _pending rerun_ |
+| Citation validity | _pending rerun_ |
 
 ## What's inside
 
@@ -63,7 +73,7 @@ constraints" is tied to the right company and section.
   score scales.
 - Company names and fiscal years in the question become **metadata filters**. "Compare Meta and
   Alphabet" searches only those two companies.
-- A **cross-encoder** reranks the top 40 down to 6.
+- An optional **cross-encoder** reranker. It is off by default because the ablation showed it hurt ranking on this data.
 
 **Grounded generation.** Gemini is told to use only the numbered excerpts, cite every factual sentence,
 quote numbers exactly, and say *"I can't find this in the indexed 10-K filings."* when the answer isn't

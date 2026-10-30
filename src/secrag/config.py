@@ -50,3 +50,5 @@ class Settings:
     chunk_overlap: int = field(default_factory=lambda: int(_env("CHUNK_OVERLAP", "50")))
     top_k: int = field(default_factory=lambda: int(_env("TOP_K", "6")))
     candidates: int = field(default_factory=lambda: int(_env("CANDIDATES", "40")))
+    # Off by default: on the eval set the cross-encoder lowered hit@1 (0.90 -> 0.81) at ~90x the latency.
+    rerank: bool = field(default_factory=lambda: _env("RERANK", "false").lower() in ("1", "true", "yes"))

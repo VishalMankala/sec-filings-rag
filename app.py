@@ -17,7 +17,7 @@ st.title("10-K Analyst")
 st.caption(f"Grounded answers with citations from the latest 10-K filings of {', '.join(COMPANIES)}.")
 
 with st.sidebar:
-    rerank = st.toggle("Cross-encoder reranking", value=True)
+    rerank = st.toggle("Cross-encoder reranking (slower; lower hit@1 on our eval)", value=False)
     st.markdown("**Try:**")
     examples = [
         "What does NVIDIA say about U.S. export controls?",

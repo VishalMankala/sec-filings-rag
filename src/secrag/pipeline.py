@@ -50,14 +50,15 @@ def default_embedder(settings: Settings):
 
 
 class RAG:
-    def __init__(self, retriever: Retriever, llm, k: int = 6, mode: str = "hybrid_rerank"):
+    def __init__(self, retriever: Retriever, llm, k: int = 6, mode: str = "hybrid"):
         self.retriever, self.llm, self.k, self.mode = retriever, llm, k, mode
 
     @classmethod
-    def from_settings(cls, settings: Settings, llm=None, rerank: bool = True) -> RAG:
+    def from_settings(cls, settings: Settings, llm=None, rerank: bool | None = None) -> RAG:
         from secrag.embed import CrossEncoderReranker
         from secrag.generate import GeminiLLM
 
+        rerank = settings.rerank if rerank is None else rerank
         index = Index.load(settings.index_dir)
         reranker = CrossEncoderReranker(settings.reranker_model) if rerank else None
         retriever = Retriever(index, default_embedder(settings), reranker, settings.candidates)

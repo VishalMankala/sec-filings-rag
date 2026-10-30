@@ -2,12 +2,17 @@
 
 from __future__ import annotations
 
+import logging
 import os
+import random
 import re
+import time
 from dataclasses import dataclass, field
 from typing import Protocol
 
 from secrag.retrieve import Hit
+
+log = logging.getLogger(__name__)
 
 REFUSAL = "I can't find this in the indexed 10-K filings."
 
@@ -30,6 +35,26 @@ class LLM(Protocol):
     def complete(self, system: str, prompt: str) -> str: ...
 
 
+RETRYABLE_STATUS = (429, 500, 502, 503, 504)  # rate limit + transient server overload
+
+
+def with_retries(call, *, attempts: int = 6, base_delay_s: float = 5.0, max_delay_s: float = 90.0,
+                 sleep=time.sleep):
+    """Call `call()`; on a retryable API error wait 5s, 10s, 20s, ... (with jitter) and try again."""
+    for attempt in range(1, attempts + 1):
+        try:
+            return call()
+        except Exception as err:  # noqa: BLE001 - inspect any SDK error for an HTTP status
+            code = getattr(err, "code", None) or getattr(err, "status_code", None)
+            if code not in RETRYABLE_STATUS or attempt == attempts:
+                raise
+            delay = min(base_delay_s * 2 ** (attempt - 1), max_delay_s) * random.uniform(0.8, 1.2)
+            log.warning("LLM call failed with %s (attempt %d/%d); retrying in %.0fs", code, attempt,
+                        attempts, delay)
+            sleep(delay)
+    raise RuntimeError("unreachable")
+
+
 class GeminiLLM:
     def __init__(self, model: str, api_key: str | None = None, temperature: float = 0.0):
         from google import genai
@@ -43,10 +68,9 @@ class GeminiLLM:
     def complete(self, system: str, prompt: str) -> str:
         from google.genai import types
 
-        resp = self.client.models.generate_content(
-            model=self.name, contents=prompt,
-            config=types.GenerateContentConfig(system_instruction=system, temperature=self.temperature),
-        )
+        config = types.GenerateContentConfig(system_instruction=system, temperature=self.temperature)
+        resp = with_retries(lambda: self.client.models.generate_content(
+            model=self.name, contents=prompt, config=config))
         return (resp.text or "").strip()
 
 

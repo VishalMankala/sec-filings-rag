@@ -88,3 +88,64 @@ def test_api(retriever):
         assert client.post("/ask", json={"question": "hi"}).status_code == 422
         assert client.post("/search", json={"question": Q, "mode": "magic"}).status_code == 422
     api.STATE.clear()
+
+
+class FlakyError(Exception):
+    def __init__(self, code):
+        super().__init__(f"HTTP {code}")
+        self.code = code
+
+
+def test_with_retries_recovers_from_overload_and_gives_up_on_real_errors():
+    from secrag.generate import with_retries
+
+    calls, sleeps = [], []
+
+    def flaky():
+        calls.append(1)
+        if len(calls) < 3:
+            raise FlakyError(503)
+        return "ok"
+
+    assert with_retries(flaky, sleep=sleeps.append) == "ok"
+    assert len(calls) == 3 and len(sleeps) == 2 and sleeps[1] > sleeps[0]  # exponential backoff
+
+    def bad_request():
+        raise FlakyError(400)
+
+    import pytest
+
+    with pytest.raises(FlakyError):
+        with_retries(bad_request, sleep=sleeps.append)
+
+    def always_down():
+        raise FlakyError(503)
+
+    with pytest.raises(FlakyError):
+        with_retries(always_down, attempts=3, sleep=lambda s: None)
+
+
+def test_generation_eval_skips_questions_whose_llm_calls_fail(retriever):
+    class HalfBrokenLLM(FakeLLM):
+        def complete(self, system, prompt):
+            if "Zeta" in prompt.split("Question:")[-1]:
+                raise FlakyError(503)
+            return super().complete(system, prompt)
+
+    qs = [EvalQuestion("ok", Q, ["ACME"], ["1A"]),
+          EvalQuestion("down", "How does Zeta hedge variable rate debt?", ["ZETA"], ["7A"])]
+    judge_llm = FakeLLM('{"claims": [{"claim": "x", "supported": true}], "relevance": 5}')
+    gen = generation_eval(retriever, qs, HalfBrokenLLM(), judge_llm, k=3, mode="hybrid")
+    assert gen["questions"] == 2 and gen["llm_errors"] == 1 and gen["errors"][0]["id"] == "down"
+    assert gen["faithfulness"] == 1.0
+
+
+def test_best_mode_prefers_mrr_then_speed():
+    from secrag.evaluate import best_mode
+
+    ablation = [{"mode": "bm25", "mrr": 0.837, "ms_per_query": 3.7},
+                {"mode": "hybrid", "mrr": 0.936, "ms_per_query": 34.1},
+                {"mode": "hybrid_rerank", "mrr": 0.891, "ms_per_query": 2980.5}]
+    assert best_mode(ablation) == "hybrid"
+    assert best_mode([{"mode": "a", "mrr": 0.9, "ms_per_query": 50},
+                      {"mode": "b", "mrr": 0.9, "ms_per_query": 5}]) == "b"

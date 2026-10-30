@@ -44,6 +44,15 @@ boilerplate from different companies is almost indistinguishable to an embedding
   chunk. That's why it runs only on the fused candidates.
 
 The ablation in the evaluation report measures what each step contributes, instead of assuming it helps.
+It paid off: the generic MS MARCO reranker *lowered* hit@1 from 0.90 to 0.81 on 10-K questions at ~90x the
+latency. MS MARCO teaches "does this web passage answer this web query"; 10-K sections are long, formal and
+full of near-duplicate boilerplate across companies, where the reranker over-weights generic risk language.
+So serving uses plain hybrid retrieval, and the evaluation chooses the mode for generation from the measured
+MRR rather than from a hard-coded default.
+
+**Resilience.** Free-tier LLM APIs return 429/503 under load. Every Gemini call retries with exponential
+backoff and jitter (5 s, 10 s, 20 s, …), and a question whose calls still fail is recorded as skipped instead
+of aborting the whole evaluation. The report states how many were skipped.
 
 ## Generation
 

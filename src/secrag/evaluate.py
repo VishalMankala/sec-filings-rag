@@ -64,6 +64,11 @@ def retrieval_metrics(retriever: Retriever, questions: list[EvalQuestion], mode:
     }
 
 
+def best_mode(ablation: list[dict]) -> str:
+    """Highest MRR wins; on a tie, the cheaper (faster) mode."""
+    return max(ablation, key=lambda r: (round(r["mrr"], 3), -r["ms_per_query"]))["mode"]
+
+
 def retrieval_ablation(retriever: Retriever, questions: list[EvalQuestion], k: int = 6) -> list[dict]:
     modes = [m for m in MODES if m != "hybrid_rerank" or retriever.reranker is not None]
     return [retrieval_metrics(retriever, questions, m, k) for m in modes]
@@ -96,27 +101,33 @@ def generation_eval(retriever: Retriever, questions: list[EvalQuestion], llm: LL
                     k: int = 6, mode: str = "hybrid_rerank", pause_s: float = 0.0) -> dict:
     if mode == "hybrid_rerank" and retriever.reranker is None:
         mode = "hybrid"
-    rows = []
+    rows, errors = [], []
     for q in questions:
         hits = retriever.search(q.question, k=k, mode=mode)
-        t0 = time.perf_counter()
-        a = answer(q.question, hits, llm)
-        latency = time.perf_counter() - t0
-        row = {"id": q.id, "answerable": q.answerable, "refused": a.refused, "citation_valid": a.citation_valid,
-               "cited": len(a.cited), "uncited_sentences": len(a.uncited_sentences),
-               "latency_s": round(latency, 2), "answer": a.text}
-        if q.answerable and not a.refused:
-            row.update(judge(judge_llm, q.question, format_context(hits), a.text))
-        rows.append(row)
+        try:
+            t0 = time.perf_counter()
+            a = answer(q.question, hits, llm)
+            latency = time.perf_counter() - t0
+            row = {"id": q.id, "answerable": q.answerable, "refused": a.refused,
+                   "citation_valid": a.citation_valid, "cited": len(a.cited),
+                   "uncited_sentences": len(a.uncited_sentences), "latency_s": round(latency, 2),
+                   "answer": a.text}
+            if q.answerable and not a.refused:
+                row.update(judge(judge_llm, q.question, format_context(hits), a.text))
+            rows.append(row)
+        except Exception as err:  # noqa: BLE001 - one API outage must not sink the whole evaluation
+            errors.append({"id": q.id, "error": f"{type(err).__name__}: {err}"[:300]})
         if pause_s:
             time.sleep(pause_s)  # stay under free-tier rate limits
+    if not rows:
+        raise RuntimeError(f"Every LLM call failed; first error: {errors[0]['error'] if errors else '?'}")
 
     ans = [r for r in rows if r["answerable"]]
     unans = [r for r in rows if not r["answerable"]]
     faith = [r["faithfulness"] for r in ans if r.get("faithfulness") is not None]
     rel = [r["relevance"] for r in ans if isinstance(r.get("relevance"), int | float)]
     return {
-        "mode": mode, "llm": llm.name, "judge": judge_llm.name, "questions": len(rows),
+        "mode": mode, "llm": llm.name, "judge": judge_llm.name, "questions": len(rows) + len(errors),
         "faithfulness": round(statistics.mean(faith), 4) if faith else None,
         "answer_relevance_1to5": round(statistics.mean(rel), 2) if rel else None,
         "answered_rate": round(sum(not r["refused"] for r in ans) / len(ans), 4) if ans else None,
@@ -126,6 +137,8 @@ def generation_eval(retriever: Retriever, questions: list[EvalQuestion], llm: LL
             sum(r["uncited_sentences"] > 0 for r in ans if not r["refused"]) / max(1, sum(not r["refused"]
                                                                                           for r in ans)), 4),
         "p50_latency_s": round(statistics.median(r["latency_s"] for r in rows), 2),
+        "llm_errors": len(errors),
+        "errors": errors,
         "rows": rows,
     }
 
@@ -154,5 +167,6 @@ def to_markdown(ablation: list[dict], gen: dict | None, index_meta: dict) -> str
                   f"| Correct refusal rate (unanswerable questions) | {fmt(gen['correct_refusal_rate'])} |",
                   f"| Citation validity | {fmt(gen['citation_validity'])} |",
                   f"| Answers with an uncited sentence | {fmt(gen['answers_with_uncited_sentences'])} |",
-                  f"| Median generation latency (s) | {fmt(gen['p50_latency_s'])} |"]
+                  f"| Median generation latency (s) | {fmt(gen['p50_latency_s'])} |",
+                  f"| Questions skipped (LLM API errors after retries) | {gen['llm_errors']} |"]
     return "\n".join(lines) + "\n"

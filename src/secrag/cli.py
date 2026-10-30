@@ -20,7 +20,7 @@ def main(argv: list[str] | None = None) -> int:
 
     ask = sub.add_parser("ask", help="Answer a question with citations")
     ask.add_argument("question")
-    ask.add_argument("--no-rerank", action="store_true")
+    ask.add_argument("--rerank", action="store_true", help="Add cross-encoder reranking (off by default)")
 
     ev = sub.add_parser("eval", help="Retrieval ablation (+ generation eval with an LLM key)")
     ev.add_argument("--questions", type=Path, default=Path("eval/questions.jsonl"))
@@ -48,7 +48,7 @@ def main(argv: list[str] | None = None) -> int:
     elif args.cmd == "ask":
         from secrag.pipeline import RAG
 
-        a = RAG.from_settings(s, rerank=not args.no_rerank).ask(args.question)
+        a = RAG.from_settings(s, rerank=args.rerank or None).ask(args.question)
         print(a.text, "\n")
         for src in a.sources():
             print(f"[{src['n']}] {src['ticker']} FY{src['fiscal_year']} Item {src['item']} {src['item_title']}")
@@ -63,7 +63,7 @@ def main(argv: list[str] | None = None) -> int:
 
 def run_eval(args, s: Settings) -> int:
     from secrag.embed import CrossEncoderReranker
-    from secrag.evaluate import generation_eval, load_questions, retrieval_ablation, to_markdown
+    from secrag.evaluate import best_mode, generation_eval, load_questions, retrieval_ablation, to_markdown
     from secrag.index import Index
     from secrag.pipeline import default_embedder
     from secrag.retrieve import Retriever
@@ -79,7 +79,8 @@ def run_eval(args, s: Settings) -> int:
         from secrag.generate import GeminiLLM
 
         llm = GeminiLLM(s.llm_model)
-        gen = generation_eval(retriever, questions, llm, llm, k=s.top_k, pause_s=args.pause)
+        mode = best_mode(ablation)  # answer with the retrieval mode the ablation measured as best
+        gen = generation_eval(retriever, questions, llm, llm, k=s.top_k, mode=mode, pause_s=args.pause)
 
     args.out.mkdir(parents=True, exist_ok=True)
     meta = json.loads((s.index_dir / "meta.json").read_text())
