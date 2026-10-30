@@ -149,3 +149,26 @@ def test_best_mode_prefers_mrr_then_speed():
     assert best_mode(ablation) == "hybrid"
     assert best_mode([{"mode": "a", "mrr": 0.9, "ms_per_query": 50},
                       {"mode": "b", "mrr": 0.9, "ms_per_query": 5}]) == "b"
+
+
+def test_generation_eval_stops_early_when_quota_is_exhausted(retriever):
+    class QuotaLLM(FakeLLM):
+        def complete(self, system, prompt):
+            raise FlakyError(429)
+
+    qs = [EvalQuestion(f"q{i}", Q, ["ACME"], ["1A"]) for i in range(10)]
+    gen = generation_eval(retriever, qs, QuotaLLM(), QuotaLLM(), k=3, mode="hybrid")
+    assert gen["evaluated"] == 0 and gen["llm_errors"] == 2
+    assert "not attempted" in gen["stopped_early"] and gen["faithfulness"] is None
+
+
+def test_sample_questions_keeps_unanswerable_and_spreads_the_rest():
+    from secrag.evaluate import sample_questions
+
+    qs = [EvalQuestion(f"a{i}", "q", ["X"], ["1"]) for i in range(40)]
+    qs += [EvalQuestion(f"u{i}", "q", [], [], answerable=False) for i in range(6)]
+    picked = sample_questions(qs, 20)
+    assert len(picked) == 20
+    assert sum(not q.answerable for q in picked) == 6
+    assert picked[0].id == "a0" and picked[13].id not in {"a13"}  # spread, not the first 14
+    assert sample_questions(qs, None) == qs

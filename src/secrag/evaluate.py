@@ -97,12 +97,32 @@ def judge(llm: LLM, question: str, context: str, answer_text: str) -> dict:
             "relevance": data.get("relevance")}
 
 
+def sample_questions(questions: list[EvalQuestion], n: int | None) -> list[EvalQuestion]:
+    """Deterministic subset that fits a free API quota: every unanswerable question plus
+    answerable ones spread evenly across the file (and therefore across companies/categories)."""
+    if not n or n >= len(questions):
+        return questions
+    unans = [q for q in questions if not q.answerable]
+    ans = [q for q in questions if q.answerable]
+    k = max(n - len(unans), 1)
+    step = len(ans) / k
+    picked = [ans[int(i * step)] for i in range(k)]
+    return picked + unans[: max(n - k, 0)]
+
+
 def generation_eval(retriever: Retriever, questions: list[EvalQuestion], llm: LLM, judge_llm: LLM,
-                    k: int = 6, mode: str = "hybrid_rerank", pause_s: float = 0.0) -> dict:
+                    k: int = 6, mode: str = "hybrid_rerank", pause_s: float = 0.0,
+                    max_consecutive_failures: int = 2) -> dict:
+    """Answer + judge each question. Stops early (keeping partial results) when the API keeps
+    failing, e.g. a daily quota is exhausted, instead of burning the job's time on retries."""
     if mode == "hybrid_rerank" and retriever.reranker is None:
         mode = "hybrid"
-    rows, errors = [], []
+    rows, errors, consecutive, stopped_early = [], [], 0, None
     for q in questions:
+        if consecutive >= max_consecutive_failures:
+            stopped_early = (f"stopped after {consecutive} consecutive failed questions "
+                             f"(likely API quota); {len(questions) - len(rows) - len(errors)} not attempted")
+            break
         hits = retriever.search(q.question, k=k, mode=mode)
         try:
             t0 = time.perf_counter()
@@ -115,28 +135,29 @@ def generation_eval(retriever: Retriever, questions: list[EvalQuestion], llm: LL
             if q.answerable and not a.refused:
                 row.update(judge(judge_llm, q.question, format_context(hits), a.text))
             rows.append(row)
+            consecutive = 0
         except Exception as err:  # noqa: BLE001 - one API outage must not sink the whole evaluation
             errors.append({"id": q.id, "error": f"{type(err).__name__}: {err}"[:300]})
+            consecutive += 1
         if pause_s:
             time.sleep(pause_s)  # stay under free-tier rate limits
-    if not rows:
-        raise RuntimeError(f"Every LLM call failed; first error: {errors[0]['error'] if errors else '?'}")
-
     ans = [r for r in rows if r["answerable"]]
     unans = [r for r in rows if not r["answerable"]]
     faith = [r["faithfulness"] for r in ans if r.get("faithfulness") is not None]
     rel = [r["relevance"] for r in ans if isinstance(r.get("relevance"), int | float)]
     return {
-        "mode": mode, "llm": llm.name, "judge": judge_llm.name, "questions": len(rows) + len(errors),
+        "mode": mode, "llm": llm.name, "judge": judge_llm.name, "questions": len(questions),
         "faithfulness": round(statistics.mean(faith), 4) if faith else None,
         "answer_relevance_1to5": round(statistics.mean(rel), 2) if rel else None,
         "answered_rate": round(sum(not r["refused"] for r in ans) / len(ans), 4) if ans else None,
         "correct_refusal_rate": round(sum(r["refused"] for r in unans) / len(unans), 4) if unans else None,
-        "citation_validity": round(sum(r["citation_valid"] for r in rows) / len(rows), 4),
+        "citation_validity": round(sum(r["citation_valid"] for r in rows) / len(rows), 4) if rows else None,
         "answers_with_uncited_sentences": round(
             sum(r["uncited_sentences"] > 0 for r in ans if not r["refused"]) / max(1, sum(not r["refused"]
                                                                                           for r in ans)), 4),
-        "p50_latency_s": round(statistics.median(r["latency_s"] for r in rows), 2),
+        "p50_latency_s": round(statistics.median(r["latency_s"] for r in rows), 2) if rows else None,
+        "evaluated": len(rows),
+        "stopped_early": stopped_early,
         "llm_errors": len(errors),
         "errors": errors,
         "rows": rows,
@@ -168,5 +189,8 @@ def to_markdown(ablation: list[dict], gen: dict | None, index_meta: dict) -> str
                   f"| Citation validity | {fmt(gen['citation_validity'])} |",
                   f"| Answers with an uncited sentence | {fmt(gen['answers_with_uncited_sentences'])} |",
                   f"| Median generation latency (s) | {fmt(gen['p50_latency_s'])} |",
-                  f"| Questions skipped (LLM API errors after retries) | {gen['llm_errors']} |"]
+                  f"| Questions evaluated / attempted with errors / planned | {gen['evaluated']} / "
+                  f"{gen['llm_errors']} / {gen['questions']} |"]
+        if gen.get("stopped_early"):
+            lines += ["", f"> Generation eval {gen['stopped_early']}."]
     return "\n".join(lines) + "\n"

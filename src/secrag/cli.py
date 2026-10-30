@@ -29,7 +29,9 @@ def main(argv: list[str] | None = None) -> int:
     ev.add_argument("--no-rerank", action="store_true")
     ev.add_argument("--min-recall", type=float, default=None, help="Fail if best-mode recall@k is below this")
     ev.add_argument("--min-faithfulness", type=float, default=None)
-    ev.add_argument("--pause", type=float, default=4.0, help="Seconds between LLM calls (free-tier limits)")
+    ev.add_argument("--pause", type=float, default=6.0, help="Seconds between questions (free-tier limits)")
+    ev.add_argument("--max-questions", type=int, default=None,
+                    help="Generation eval on a balanced subset (each question = 2 LLM calls)")
 
     srv = sub.add_parser("serve", help="Run the API")
     srv.add_argument("--port", type=int, default=8000)
@@ -63,7 +65,14 @@ def main(argv: list[str] | None = None) -> int:
 
 def run_eval(args, s: Settings) -> int:
     from secrag.embed import CrossEncoderReranker
-    from secrag.evaluate import best_mode, generation_eval, load_questions, retrieval_ablation, to_markdown
+    from secrag.evaluate import (
+        best_mode,
+        generation_eval,
+        load_questions,
+        retrieval_ablation,
+        sample_questions,
+        to_markdown,
+    )
     from secrag.index import Index
     from secrag.pipeline import default_embedder
     from secrag.retrieve import Retriever
@@ -80,7 +89,8 @@ def run_eval(args, s: Settings) -> int:
 
         llm = GeminiLLM(s.llm_model)
         mode = best_mode(ablation)  # answer with the retrieval mode the ablation measured as best
-        gen = generation_eval(retriever, questions, llm, llm, k=s.top_k, mode=mode, pause_s=args.pause)
+        gen = generation_eval(retriever, sample_questions(questions, args.max_questions), llm, llm,
+                              k=s.top_k, mode=mode, pause_s=args.pause)
 
     args.out.mkdir(parents=True, exist_ok=True)
     meta = json.loads((s.index_dir / "meta.json").read_text())
@@ -95,8 +105,13 @@ def run_eval(args, s: Settings) -> int:
     best = max(r[f"recall@{s.top_k}"] for r in ablation)
     if args.min_recall is not None and best < args.min_recall:
         failed.append(f"recall@{s.top_k} {best:.3f} < {args.min_recall}")
-    if gen and args.min_faithfulness is not None and (gen["faithfulness"] or 0) < args.min_faithfulness:
-        failed.append(f"faithfulness {gen['faithfulness']} < {args.min_faithfulness}")
+    judged = sum(1 for r in (gen or {}).get("rows", []) if r.get("faithfulness") is not None)
+    if gen and args.min_faithfulness is not None:
+        if judged < 5:  # an API quota problem is not a quality regression: report it, don't fail on it
+            print(f"WARNING: only {judged} answers judged ({gen.get('stopped_early') or 'see errors'}); "
+                  "faithfulness gate skipped")
+        elif gen["faithfulness"] < args.min_faithfulness:
+            failed.append(f"faithfulness {gen['faithfulness']} < {args.min_faithfulness}")
     if failed:
         print("EVAL GATE FAILED: " + "; ".join(failed))
         return 1

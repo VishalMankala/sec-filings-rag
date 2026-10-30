@@ -2,13 +2,22 @@ name: RAG evaluation
 
 # Builds the real index from EDGAR and runs the evaluation harness.
 #  - Retrieval ablation always runs (no API key needed) and gates on recall@6.
-#  - Generation eval (faithfulness, refusals, citations) runs when the GEMINI_API_KEY
-#    repository secret is set: Settings -> Secrets and variables -> Actions.
+#  - Generation eval (faithfulness, refusals, citations) uses the Gemini API, so it runs only
+#    when started by hand (Run workflow) and the GEMINI_API_KEY repository secret is set.
+#    Free-tier keys have a small DAILY quota; each question costs 2 calls (answer + judge),
+#    so the default evaluates a balanced subset of 20 questions.
 on:
   push:
     branches: [main]
     paths: ["src/**", "eval/questions.jsonl", ".github/workflows/eval.yml"]
   workflow_dispatch:
+    inputs:
+      max_questions:
+        description: "Questions for the Gemini eval (each = 2 API calls; all 47 needs a paid key)"
+        default: "20"
+      llm_model:
+        description: "Gemini model"
+        default: "gemini-3.6-flash"
   schedule:
     - cron: "17 6 * * 1"  # weekly: picks up newly filed 10-Ks
 
@@ -39,9 +48,11 @@ jobs:
         run: secrag ingest | tee ingest.txt
       - name: Retrieval ablation (gate)
         run: secrag eval --retrieval-only --min-recall 0.6
-      - name: Generation eval (needs GEMINI_API_KEY secret)
-        if: env.GEMINI_API_KEY != ''
-        run: secrag eval --min-recall 0.6 --min-faithfulness 0.8
+      - name: Generation eval (manual runs only; needs GEMINI_API_KEY secret)
+        if: github.event_name == 'workflow_dispatch' && env.GEMINI_API_KEY != ''
+        env:
+          LLM_MODEL: ${{ inputs.llm_model }}
+        run: secrag eval --min-recall 0.6 --min-faithfulness 0.8 --max-questions "${{ inputs.max_questions }}"
       - name: Job summary
         if: always()
         run: |
