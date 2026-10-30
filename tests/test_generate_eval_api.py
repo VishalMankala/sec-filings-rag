@@ -1,0 +1,90 @@
+import json
+
+from conftest import FakeLLM
+from fastapi.testclient import TestClient
+
+from secrag.evaluate import EvalQuestion, generation_eval, judge, load_questions, retrieval_ablation, to_markdown
+from secrag.generate import REFUSAL, SYSTEM_PROMPT, answer, build_prompt, check_citations
+from secrag.pipeline import RAG
+
+Q = "What does Acme say about its single-source supplier?"
+
+
+def test_prompt_numbers_sources_and_states_rules(retriever):
+    hits = retriever.search(Q, k=3, mode="hybrid")
+    prompt = build_prompt(Q, hits)
+    assert "[1] Acme Robotics Inc. (ACME) | FY2025 10-K | Item 1A" in prompt
+    assert "[3]" in prompt and "[4]" not in prompt
+    assert REFUSAL in SYSTEM_PROMPT and "ONLY" in SYSTEM_PROMPT
+
+
+def test_check_citations():
+    valid, invalid, uncited = check_citations(
+        "Acme relies on one supplier [1]. Revenue grew 23% [2][3]. It also has a factory in Ohio near the lake. "
+        "See [9].", n_sources=3)
+    assert valid == [1, 2, 3] and invalid == [9]
+    assert uncited == ["It also has a factory in Ohio near the lake."]
+
+
+def test_answer_with_fake_llm(retriever):
+    a = answer(Q, retriever.search(Q, k=3, mode="hybrid"), FakeLLM())
+    assert not a.refused and a.citation_valid and a.cited == [1]
+    assert a.sources()[0]["ticker"] == "ACME" and a.sources()[0]["item"] == "1A"
+
+
+def test_refusal_and_empty_retrieval(retriever):
+    a = answer("What is Initech's revenue?", retriever.search(Q, k=2, mode="hybrid"), FakeLLM(REFUSAL))
+    assert a.refused and a.uncited_sentences == []
+    llm = FakeLLM()
+    empty = answer("anything", [], llm)
+    assert empty.refused and llm.calls == []  # no LLM call when nothing was retrieved
+
+
+def test_judge_parses_json_and_tolerates_garbage():
+    ok = FakeLLM('Sure! {"claims": [{"claim": "a", "supported": true}, {"claim": "b", "supported": false}], '
+                 '"relevance": 4}')
+    r = judge(ok, "q", "ctx", "ans")
+    assert (r["claims"], r["supported"], r["faithfulness"], r["relevance"]) == (2, 1, 0.5, 4)
+    assert judge(FakeLLM("not json"), "q", "c", "a")["faithfulness"] is None
+
+
+def test_retrieval_ablation_and_generation_eval(retriever, tmp_path):
+    questions = [
+        EvalQuestion("q1", Q, ["ACME"], ["1A"]),
+        EvalQuestion("q2", "How does Zeta hedge variable rate debt?", ["ZETA"], ["7A"]),
+        EvalQuestion("q3", "Compare Acme and Zeta cybersecurity leadership", ["ACME", "ZETA"], ["1C"]),
+        EvalQuestion("u1", "What is Initech's revenue?", [], [], answerable=False),
+    ]
+    p = tmp_path / "q.jsonl"
+    p.write_text("\n".join(json.dumps(q.__dict__) for q in questions))
+    assert len(load_questions(p)) == 4
+
+    ablation = retrieval_ablation(retriever, questions, k=3)
+    assert [r["mode"] for r in ablation] == ["bm25", "dense", "hybrid"]  # no reranker -> skipped
+    hybrid = ablation[-1]
+    assert hybrid["questions"] == 3 and hybrid["recall@3"] == 1.0 and hybrid["hit@1"] >= 2 / 3
+
+    judge_llm = FakeLLM('{"claims": [{"claim": "x", "supported": true}], "relevance": 5}')
+    gen = generation_eval(retriever, questions, FakeLLM(), judge_llm, k=3)
+    assert gen["faithfulness"] == 1.0 and gen["citation_validity"] == 1.0
+    assert gen["correct_refusal_rate"] == 0.0  # the fake LLM never refuses: the metric catches it
+    md = to_markdown(ablation, gen, {"n_chunks": 10, "documents": ["a", "b"], "embedder": "hashing"})
+    assert "Retrieval ablation" in md and "Faithfulness" in md
+
+
+def test_api(retriever):
+    from secrag import api
+
+    api.STATE["rag"] = RAG(retriever, FakeLLM(), k=3, mode="hybrid")
+    with TestClient(api.app) as client:
+        assert client.get("/health").json()["chunks"] == len(retriever.index.chunks)
+        r = client.post("/ask", json={"question": Q})
+        body = r.json()
+        assert r.status_code == 200 and not body["refused"] and body["citations_valid"]
+        assert body["sources"][0]["ticker"] == "ACME"
+        assert "X-Process-Time-Ms" in r.headers
+        hits = client.post("/search", json={"question": Q, "k": 2, "mode": "bm25"}).json()
+        assert len(hits) == 2 and hits[0]["item"] == "1A"
+        assert client.post("/ask", json={"question": "hi"}).status_code == 422
+        assert client.post("/search", json={"question": Q, "mode": "magic"}).status_code == 422
+    api.STATE.clear()

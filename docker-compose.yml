@@ -1,0 +1,24 @@
+# 1) docker compose run --rm ingest        # download 10-Ks from EDGAR + build the index into ./data
+# 2) docker compose up -d api ui           # API http://localhost:8000/docs, UI http://localhost:8501
+# Requires GEMINI_API_KEY in your environment or a .env file (free: https://aistudio.google.com/apikey)
+x-common: &common
+  build: { context: ., dockerfile: docker/Dockerfile }
+  image: secrag:latest
+  volumes: ["./data:/app/data"]
+  environment:
+    GEMINI_API_KEY: ${GEMINI_API_KEY:-}
+    LLM_MODEL: ${LLM_MODEL:-gemini-3.6-flash}
+    SEC_USER_AGENT: ${SEC_USER_AGENT:-sec-filings-rag research vishalmankala77@gmail.com}
+
+services:
+  ingest:
+    <<: *common
+    command: ["secrag", "ingest"]
+    profiles: ["ingest"]
+  api:
+    <<: *common
+    ports: ["8000:8000"]
+  ui:
+    <<: *common
+    command: ["streamlit", "run", "app.py", "--server.address=0.0.0.0", "--server.port=8501"]
+    ports: ["8501:8501"]

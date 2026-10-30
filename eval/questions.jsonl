@@ -1,0 +1,47 @@
+{"id": "aapl-suppliers", "question": "What risks does Apple describe about its reliance on outsourcing partners and single-source suppliers?", "tickers": ["AAPL"], "items": ["1A"], "answerable": true, "category": "risk"}
+{"id": "aapl-business", "question": "How does Apple describe its main product categories and services?", "tickers": ["AAPL"], "items": ["1", "7"], "answerable": true, "category": "business"}
+{"id": "aapl-fx", "question": "How does Apple describe its exposure to foreign currency exchange rate risk?", "tickers": ["AAPL"], "items": ["7A", "1A", "8"], "answerable": true, "category": "market_risk"}
+{"id": "aapl-cyber", "question": "How does Apple manage and oversee cybersecurity risk?", "tickers": ["AAPL"], "items": ["1C"], "answerable": true, "category": "cyber"}
+{"id": "aapl-buyback", "question": "What does Apple's 10-K say about its share repurchase program?", "tickers": ["AAPL"], "items": ["5", "7", "8"], "answerable": true, "category": "capital"}
+{"id": "aapl-legal", "question": "What legal proceedings does Apple disclose?", "tickers": ["AAPL"], "items": ["3", "1A", "8"], "answerable": true, "category": "legal"}
+{"id": "msft-segments", "question": "What are Microsoft's reportable segments?", "tickers": ["MSFT"], "items": ["1", "7", "8"], "answerable": true, "category": "business"}
+{"id": "msft-ai-risk", "question": "What risks does Microsoft identify related to artificial intelligence?", "tickers": ["MSFT"], "items": ["1A"], "answerable": true, "category": "risk"}
+{"id": "msft-cyber", "question": "Who is responsible for cybersecurity risk management at Microsoft and how is it reported to the board?", "tickers": ["MSFT"], "items": ["1C"], "answerable": true, "category": "cyber"}
+{"id": "msft-cloud", "question": "What drove the change in Microsoft Cloud revenue according to management's discussion?", "tickers": ["MSFT"], "items": ["7"], "answerable": true, "category": "financials"}
+{"id": "msft-employees", "question": "How many people does Microsoft employ?", "tickers": ["MSFT"], "items": ["1"], "answerable": true, "category": "business"}
+{"id": "nvda-export", "question": "What does NVIDIA say about U.S. export controls and their effect on its business?", "tickers": ["NVDA"], "items": ["1A", "7", "1"], "answerable": true, "category": "risk"}
+{"id": "nvda-customers", "question": "Does NVIDIA disclose concentration of revenue among a small number of customers?", "tickers": ["NVDA"], "items": ["1A", "7", "8"], "answerable": true, "category": "risk"}
+{"id": "nvda-segments", "question": "What are NVIDIA's operating segments?", "tickers": ["NVDA"], "items": ["1", "7", "8"], "answerable": true, "category": "business"}
+{"id": "nvda-foundry", "question": "What risks does NVIDIA describe about its dependence on third-party foundries and suppliers?", "tickers": ["NVDA"], "items": ["1A"], "answerable": true, "category": "risk"}
+{"id": "nvda-employees", "question": "How many employees does NVIDIA have?", "tickers": ["NVDA"], "items": ["1"], "answerable": true, "category": "business"}
+{"id": "amzn-segments", "question": "What are Amazon's reportable segments?", "tickers": ["AMZN"], "items": ["1", "7", "8"], "answerable": true, "category": "business"}
+{"id": "amzn-aws", "question": "How did AWS segment sales and operating income change compared with the prior year?", "tickers": ["AMZN"], "items": ["7"], "answerable": true, "category": "financials"}
+{"id": "amzn-capex", "question": "What does Amazon say about its capital expenditures and investments in infrastructure?", "tickers": ["AMZN"], "items": ["7"], "answerable": true, "category": "financials"}
+{"id": "amzn-labor", "question": "What risks does Amazon describe related to its workforce and labor?", "tickers": ["AMZN"], "items": ["1A"], "answerable": true, "category": "risk"}
+{"id": "amzn-rates", "question": "How does Amazon describe its interest rate risk?", "tickers": ["AMZN"], "items": ["7A"], "answerable": true, "category": "market_risk"}
+{"id": "googl-ads", "question": "How dependent is Alphabet on advertising revenue?", "tickers": ["GOOGL"], "items": ["1A", "1", "7"], "answerable": true, "category": "risk"}
+{"id": "googl-legal", "question": "What antitrust and legal proceedings does Alphabet discuss?", "tickers": ["GOOGL"], "items": ["3", "1A", "8"], "answerable": true, "category": "legal"}
+{"id": "googl-otherbets", "question": "What is Other Bets at Alphabet?", "tickers": ["GOOGL"], "items": ["1", "7", "8"], "answerable": true, "category": "business"}
+{"id": "googl-cyber", "question": "How does Alphabet's board oversee cybersecurity risk?", "tickers": ["GOOGL"], "items": ["1C"], "answerable": true, "category": "cyber"}
+{"id": "meta-rl", "question": "What was Reality Labs' operating loss and what does Meta expect for it?", "tickers": ["META"], "items": ["7", "1A", "8"], "answerable": true, "category": "financials"}
+{"id": "meta-eu", "question": "What regulatory risks in the European Union does Meta describe?", "tickers": ["META"], "items": ["1A"], "answerable": true, "category": "risk"}
+{"id": "meta-capex", "question": "What does Meta say about its capital expenditures and AI infrastructure?", "tickers": ["META"], "items": ["7"], "answerable": true, "category": "financials"}
+{"id": "meta-dap", "question": "How does Meta define Family daily active people?", "tickers": ["META"], "items": ["7", "1"], "answerable": true, "category": "metrics"}
+{"id": "tsla-segments", "question": "What are Tesla's reportable segments?", "tickers": ["TSLA"], "items": ["1", "7", "8"], "answerable": true, "category": "business"}
+{"id": "tsla-musk", "question": "What risks does Tesla describe about its dependence on Elon Musk?", "tickers": ["TSLA"], "items": ["1A"], "answerable": true, "category": "risk"}
+{"id": "tsla-credits", "question": "What does Tesla say about revenue from regulatory credits?", "tickers": ["TSLA"], "items": ["7", "8", "1A"], "answerable": true, "category": "financials"}
+{"id": "tsla-factories", "question": "Where are Tesla's principal manufacturing facilities?", "tickers": ["TSLA"], "items": ["2", "1"], "answerable": true, "category": "business"}
+{"id": "nflx-content", "question": "What are Netflix's content obligations?", "tickers": ["NFLX"], "items": ["7", "8", "1A"], "answerable": true, "category": "financials"}
+{"id": "nflx-ads", "question": "What does Netflix say about its advertising-supported plan?", "tickers": ["NFLX"], "items": ["1", "7", "1A"], "answerable": true, "category": "business"}
+{"id": "nflx-competition", "question": "How does Netflix describe competition for entertainment time?", "tickers": ["NFLX"], "items": ["1", "1A"], "answerable": true, "category": "risk"}
+{"id": "nflx-fx", "question": "How does Netflix describe its foreign currency risk?", "tickers": ["NFLX"], "items": ["7A", "1A"], "answerable": true, "category": "market_risk"}
+{"id": "cmp-cyber", "question": "Compare how Apple and Microsoft describe their cybersecurity governance.", "tickers": ["AAPL", "MSFT"], "items": ["1C"], "answerable": true, "category": "comparison"}
+{"id": "cmp-cloud", "question": "How do Amazon and Alphabet describe competition in cloud computing?", "tickers": ["AMZN", "GOOGL"], "items": ["1", "1A"], "answerable": true, "category": "comparison"}
+{"id": "cmp-supply", "question": "What do NVIDIA and Tesla say about supply chain risks?", "tickers": ["NVDA", "TSLA"], "items": ["1A"], "answerable": true, "category": "comparison"}
+{"id": "cmp-ads", "question": "Compare how Meta and Alphabet describe their dependence on advertising.", "tickers": ["META", "GOOGL"], "items": ["1A", "1", "7"], "answerable": true, "category": "comparison"}
+{"id": "u-coke", "question": "What was Coca-Cola's net revenue in its latest annual report?", "tickers": [], "items": [], "answerable": false, "category": "unanswerable"}
+{"id": "u-forecast", "question": "What will Apple's revenue be in fiscal 2030?", "tickers": [], "items": [], "answerable": false, "category": "unanswerable"}
+{"id": "u-price", "question": "What is Tesla's stock price today?", "tickers": [], "items": [], "answerable": false, "category": "unanswerable"}
+{"id": "u-trivia", "question": "What is the favorite programming language of Microsoft's CEO?", "tickers": [], "items": [], "answerable": false, "category": "unanswerable"}
+{"id": "u-sbux", "question": "How many employees does Starbucks have?", "tickers": [], "items": [], "answerable": false, "category": "unanswerable"}
+{"id": "u-call", "question": "What did Netflix's CEO say on the most recent earnings call?", "tickers": [], "items": [], "answerable": false, "category": "unanswerable"}
